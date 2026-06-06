@@ -5,6 +5,17 @@ person names before a reviewer decides what to redact. The app renders uploaded
 PDFs in the browser, extracts text with `pdf.js`, maps detected entities back to
 page coordinates, and overlays review highlights on the live document.
 
+## Live Demo
+
+Open the public GitHub Pages site:
+
+https://gaihanhannah-hue.github.io/pdf-redaction-assistant/
+
+To use it, open the link in any modern browser, click **Choose PDF**, and upload
+a PDF from your computer. The app runs in the browser, so the document is loaded
+locally on your device while you review detected dates, names, search matches,
+and optional redaction exports.
+
 ## Quick Start
 
 ```bash
@@ -115,4 +126,3 @@ has no selectable text.
 - Downloadable redacted PDF export.
 - Stronger browser-compatible NER for names.
 - Per-page entity density indicators in the thumbnail rail.
-
