@@ -1,13 +1,22 @@
-import { FileUp, Loader2 } from 'lucide-react'
+import { FileUp, Loader2, Printer } from 'lucide-react'
 
 type UploadPanelProps = {
   fileName: string | null
   isLoading: boolean
   error: string | null
+  hasDocument: boolean
   onFileSelected: (file: File) => void
+  onPrint: () => void
 }
 
-export function UploadPanel({ fileName, isLoading, error, onFileSelected }: UploadPanelProps) {
+export function UploadPanel({
+  fileName,
+  isLoading,
+  error,
+  hasDocument,
+  onFileSelected,
+  onPrint,
+}: UploadPanelProps) {
   return (
     <section className="upload-card" aria-label="PDF upload">
       <div>
@@ -36,6 +45,12 @@ export function UploadPanel({ fileName, isLoading, error, onFileSelected }: Uplo
       <div className="upload-meta" aria-live="polite">
         {fileName ? <span>Loaded: {fileName}</span> : <span>No document loaded yet</span>}
         {error ? <strong>{error}</strong> : null}
+        {hasDocument ? (
+          <button className="print-button" onClick={onPrint} type="button">
+            <Printer size={18} />
+            Print PDF
+          </button>
+        ) : null}
       </div>
     </section>
   )

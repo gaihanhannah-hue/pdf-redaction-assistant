@@ -37,5 +37,6 @@ export type LoadedPdf = {
   document: PDFDocumentProxy
   pages: PageModel[]
   thumbnails: string[]
+  sourceBytes: Uint8Array
 }
 

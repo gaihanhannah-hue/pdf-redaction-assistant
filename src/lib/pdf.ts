@@ -78,6 +78,7 @@ async function extractPageModel(page: PDFPageProxy, pageIndex: number): Promise<
 
 export async function loadPdfFromFile(file: File): Promise<LoadedPdf> {
   const buffer = await file.arrayBuffer()
+  const sourceBytes = new Uint8Array(buffer.slice(0))
   const document = await pdfjsLib.getDocument({ data: buffer }).promise
   const pages: PageModel[] = []
   const thumbnails: string[] = []
@@ -93,6 +94,7 @@ export async function loadPdfFromFile(file: File): Promise<LoadedPdf> {
     document,
     pages,
     thumbnails,
+    sourceBytes,
   }
 }
 

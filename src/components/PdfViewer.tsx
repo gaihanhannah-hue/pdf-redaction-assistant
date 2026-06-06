@@ -8,6 +8,7 @@ type PdfViewerProps = {
   pages: PageModel[]
   activePage: number
   visibleEntities: Entity[]
+  redactions: Entity[]
   selectedEntityIds: Set<string>
   onVisiblePageChange: (pageIndex: number) => void
   onEntityToggle: (entityId: string) => void
@@ -17,6 +18,7 @@ type PageCanvasProps = {
   document: PDFDocumentProxy
   page: PageModel
   highlights: Entity[]
+  redactions: Entity[]
   selectedEntityIds: Set<string>
   onEntityToggle: (entityId: string) => void
 }
@@ -25,6 +27,7 @@ function PageCanvas({
   document,
   page,
   highlights,
+  redactions,
   selectedEntityIds,
   onEntityToggle,
 }: PageCanvasProps) {
@@ -68,6 +71,20 @@ function PageCanvas({
           />
         ))}
       </div>
+      <div className="redaction-layer" aria-hidden="true">
+        {redactions.map((entity) => (
+          <div
+            className="redaction-box"
+            key={entity.id}
+            style={{
+              left: entity.bbox.x,
+              top: entity.bbox.y,
+              width: entity.bbox.width,
+              height: entity.bbox.height,
+            }}
+          />
+        ))}
+      </div>
     </article>
   )
 }
@@ -77,11 +94,13 @@ export function PdfViewer({
   pages,
   activePage,
   visibleEntities,
+  redactions,
   selectedEntityIds,
   onVisiblePageChange,
   onEntityToggle,
 }: PdfViewerProps) {
   const viewerRef = useRef<HTMLDivElement | null>(null)
+  const isManualScrollingRef = useRef(false)
   const highlightsByPage = useMemo(() => {
     const grouped = new Map<number, Entity[]>()
 
@@ -94,11 +113,34 @@ export function PdfViewer({
     return grouped
   }, [visibleEntities])
 
+  const redactionsByPage = useMemo(() => {
+    const grouped = new Map<number, Entity[]>()
+
+    for (const entity of redactions) {
+      const pageRedactions = grouped.get(entity.pageIndex) ?? []
+      pageRedactions.push(entity)
+      grouped.set(entity.pageIndex, pageRedactions)
+    }
+
+    return grouped
+  }, [redactions])
+
   useEffect(() => {
     const viewer = viewerRef.current
     const target = viewer?.querySelector<HTMLElement>(`[data-page-index="${activePage}"]`)
 
-    target?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    if (!target) {
+      return
+    }
+
+    isManualScrollingRef.current = true
+    target.scrollIntoView({ behavior: 'smooth', block: 'start' })
+
+    const timeout = setTimeout(() => {
+      isManualScrollingRef.current = false
+    }, 600)
+
+    return () => clearTimeout(timeout)
   }, [activePage])
 
   useEffect(() => {
@@ -110,6 +152,10 @@ export function PdfViewer({
 
     const observer = new IntersectionObserver(
       (entries) => {
+        if (isManualScrollingRef.current) {
+          return
+        }
+
         const visibleEntry = entries
           .filter((entry) => entry.isIntersecting)
           .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0]
@@ -148,6 +194,7 @@ export function PdfViewer({
               key={page.pageIndex}
               onEntityToggle={onEntityToggle}
               page={page}
+              redactions={redactionsByPage.get(page.pageIndex) ?? []}
               selectedEntityIds={selectedEntityIds}
             />
           ))
