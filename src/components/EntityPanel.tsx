@@ -2,11 +2,20 @@ import { ChevronDown, ChevronRight, Search } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent } from 'react'
 import type { Entity } from '../types'
 
-type PanelSection = 'dates' | 'names' | 'review' | 'redactions'
+type PanelSection = 'dates' | 'names' | 'phones' | 'review' | 'redactions'
 
 type EntityGroup = {
   text: string
   items: Entity[]
+  firstEntity: Entity
+}
+
+function compareEntitiesByDocumentOrder(a: Entity, b: Entity) {
+  if (a.pageIndex !== b.pageIndex) {
+    return a.pageIndex - b.pageIndex
+  }
+
+  return a.bbox.y - b.bbox.y || a.bbox.x - b.bbox.x
 }
 
 type EntityPanelProps = {
@@ -19,8 +28,8 @@ type EntityPanelProps = {
   onSearchTermChange: (value: string) => void
   onEntitySelect: (entity: Entity) => void
   onRedactionToggle: (entityId: string, pageIndex: number) => void
-  onSelectAllByType: (type: 'date' | 'name') => void
-  onDeselectAllByType: (type: 'date' | 'name') => void
+  onSelectAllByType: (type: Exclude<Entity['type'], 'search'>) => void
+  onDeselectAllByType: (type: Exclude<Entity['type'], 'search'>) => void
   onNavigateToPage: (pageIndex: number) => void
   onSelectEntityIds: (ids: string[]) => void
   onDeselectEntityIds: (ids: string[]) => void
@@ -61,7 +70,7 @@ function GroupedEntityRow({
   const allIds = items.map((e) => e.id)
   const allSelected = allIds.every((id) => selectedEntityIds.has(id))
 
-  const sorted = [...items].sort((a, b) => a.pageIndex - b.pageIndex)
+  const sorted = [...items].sort(compareEntitiesByDocumentOrder)
 
   const handleGroupCheck = () => {
     if (allSelected) {
@@ -224,7 +233,7 @@ function EntitySection({
   dragHandleProps,
 }: {
   title: string
-  type: 'date' | 'name'
+  type: Exclude<Entity['type'], 'search'>
   entities: Entity[]
   selectedEntityIds: Set<string>
   redactedEntityIds: Set<string>
@@ -253,13 +262,11 @@ function EntitySection({
     return (
       Array.from(map.entries())
         // keep original casing from first item
-        .map(([, items]) => ({ text: items[0].text, items }))
-        // multi-item groups first, then alphabetically
-        .sort((a, b) => {
-          if (a.items.length > 1 && b.items.length === 1) return -1
-          if (a.items.length === 1 && b.items.length > 1) return 1
-          return a.text.localeCompare(b.text)
+        .map(([, items]) => {
+          const sortedItems = [...items].sort(compareEntitiesByDocumentOrder)
+          return { text: sortedItems[0].text, items: sortedItems, firstEntity: sortedItems[0] }
         })
+        .sort((a, b) => compareEntitiesByDocumentOrder(a.firstEntity, b.firstEntity))
     )
   }, [entities])
 
@@ -376,6 +383,7 @@ export function EntityPanel({
   const [sectionOrder, setSectionOrder] = useState<PanelSection[]>([
     'dates',
     'names',
+    'phones',
     'review',
     'redactions',
   ])
@@ -386,6 +394,7 @@ export function EntityPanel({
   const [listHeights, setListHeights] = useState<Record<string, number>>({
     dates: 270,
     names: 270,
+    phones: 220,
   })
   const sectionResizeRef = useRef<{
     section: string
@@ -397,8 +406,18 @@ export function EntityPanel({
   const [selectedRedactionIds, setSelectedRedactionIds] = useState<Set<string>>(new Set())
 
   /* ---- derived ---- */
-  const dateEntities = useMemo(() => entities.filter((e) => e.type === 'date'), [entities])
-  const nameEntities = useMemo(() => entities.filter((e) => e.type === 'name'), [entities])
+  const dateEntities = useMemo(
+    () => entities.filter((e) => e.type === 'date').sort(compareEntitiesByDocumentOrder),
+    [entities],
+  )
+  const nameEntities = useMemo(
+    () => entities.filter((e) => e.type === 'name').sort(compareEntitiesByDocumentOrder),
+    [entities],
+  )
+  const phoneEntities = useMemo(
+    () => entities.filter((e) => e.type === 'phone').sort(compareEntitiesByDocumentOrder),
+    [entities],
+  )
 
   const allRedactionsSelected =
     redactionQueue.length > 0 && redactionQueue.every((e) => selectedRedactionIds.has(e.id))
@@ -577,6 +596,27 @@ export function EntityPanel({
             selectedEntityIds={selectedEntityIds}
             title="Names"
             type="name"
+          />
+        )
+
+      case 'phones':
+        return (
+          <EntitySection
+            dragHandleProps={getSectionDragHandleProps(section)}
+            entities={phoneEntities}
+            listHeight={listHeights.phones}
+            onDeselectAll={() => onDeselectAllByType('phone')}
+            onDeselectEntityIds={onDeselectEntityIds}
+            onEntitySelect={onEntitySelect}
+            onNavigateToPage={onNavigateToPage}
+            onRedactionToggle={onRedactionToggle}
+            onResizeStart={startSectionResize('phones')}
+            onSelectAll={() => onSelectAllByType('phone')}
+            onSelectEntityIds={onSelectEntityIds}
+            redactedEntityIds={redactedEntityIds}
+            selectedEntityIds={selectedEntityIds}
+            title="Phone numbers"
+            type="phone"
           />
         )
 

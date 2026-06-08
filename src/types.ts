@@ -1,6 +1,6 @@
 import type { PDFDocumentProxy } from 'pdfjs-dist'
 
-export type EntityType = 'date' | 'name' | 'search'
+export type EntityType = 'date' | 'name' | 'phone' | 'search'
 
 export type HighlightBox = {
   x: number
@@ -39,4 +39,3 @@ export type LoadedPdf = {
   thumbnails: string[]
   sourceBytes: Uint8Array
 }
-

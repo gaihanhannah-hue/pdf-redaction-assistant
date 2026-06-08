@@ -20,12 +20,33 @@ function groupByPage(redactions: Entity[]) {
   return grouped
 }
 
-export async function exportRedactedPdf({
+function bytesToPdfBlob(bytes: Uint8Array) {
+  const outputBuffer = new ArrayBuffer(bytes.byteLength)
+  new Uint8Array(outputBuffer).set(bytes)
+  return new Blob([outputBuffer], { type: 'application/pdf' })
+}
+
+export function downloadPdfBytes(bytes: Uint8Array, fileName: string) {
+  const blob = bytesToPdfBlob(bytes)
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+
+  link.href = url
+  link.download = fileName
+  link.click()
+
+  setTimeout(() => URL.revokeObjectURL(url), 0)
+}
+
+export function createPdfObjectUrl(bytes: Uint8Array) {
+  return URL.createObjectURL(bytesToPdfBlob(bytes))
+}
+
+export async function createRedactedPdfBytes({
   sourceBytes,
   pages,
   redactions,
-  fileName,
-}: ExportRedactionArgs) {
+}: Omit<ExportRedactionArgs, 'fileName'>) {
   const pdfDoc = await PDFDocument.load(sourceBytes)
   const pdfPages = pdfDoc.getPages()
   const grouped = groupByPage(redactions)
@@ -58,17 +79,17 @@ export async function exportRedactedPdf({
     }
   }
 
-  const bytes = await pdfDoc.save()
-  const outputBuffer = new ArrayBuffer(bytes.byteLength)
-  new Uint8Array(outputBuffer).set(bytes)
-  const blob = new Blob([outputBuffer], { type: 'application/pdf' })
-  const url = URL.createObjectURL(blob)
+  return pdfDoc.save()
+}
+
+export async function exportRedactedPdf({
+  sourceBytes,
+  pages,
+  redactions,
+  fileName,
+}: ExportRedactionArgs) {
+  const bytes = await createRedactedPdfBytes({ sourceBytes, pages, redactions })
   const safeName = fileName.replace(/\.pdf$/i, '') || 'document'
-  const link = document.createElement('a')
 
-  link.href = url
-  link.download = `${safeName}-redacted.pdf`
-  link.click()
-
-  setTimeout(() => URL.revokeObjectURL(url), 0)
+  downloadPdfBytes(bytes, `${safeName}-redacted.pdf`)
 }

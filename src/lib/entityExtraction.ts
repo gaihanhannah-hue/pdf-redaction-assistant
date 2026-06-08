@@ -34,6 +34,17 @@ const DATE_PATTERNS: Array<{ rule: string; regex: RegExp }> = [
 const NAME_PATTERN =
   /\b(?:Mr\.|Ms\.|Mrs\.|Dr\.\s+)?[A-Z][a-z]+(?:['’-][A-Z]?[a-z]+)?(?:\s+[A-Z][a-z]+(?:['’-][A-Z]?[a-z]+)?){1,3}\b/g
 
+const PHONE_PATTERNS: Array<{ rule: string; regex: RegExp }> = [
+  {
+    rule: 'regex: US phone',
+    regex: /(^|[^\d])((?:\+1[\s.-]?)?(?:\(\d{3}\)|\d{3})[\s.-]?\d{3}[\s.-]?\d{4})(?!\d)/g,
+  },
+  {
+    rule: 'regex: international phone',
+    regex: /(^|[^\d])(\+\d{1,3}[\s.-]?(?:\d[\s.-]?){7,14})(?!\d)/g,
+  },
+]
+
 const NAME_STOP_PHRASES = new Set([
   'Page Number',
   'Show Dates',
@@ -61,8 +72,9 @@ function collectMatches(
   pattern.lastIndex = 0
 
   for (const match of textBox.text.matchAll(pattern)) {
-    const text = match[0].trim()
-    const matchIndex = match.index ?? 0
+    const rawText = match[2] ?? match[0]
+    const text = rawText.trim()
+    const matchIndex = (match.index ?? 0) + match[0].indexOf(rawText)
 
     if (
       !text ||
@@ -112,6 +124,10 @@ export function extractEntities(textBoxes: TextBox[]): Entity[] {
   for (const textBox of textBoxes) {
     for (const pattern of DATE_PATTERNS) {
       detected.push(...collectMatches(textBox, 'date', pattern.regex, pattern.rule))
+    }
+
+    for (const pattern of PHONE_PATTERNS) {
+      detected.push(...collectMatches(textBox, 'phone', pattern.regex, pattern.rule))
     }
 
     detected.push(...collectMatches(textBox, 'name', NAME_PATTERN, 'regex: title-case-name'))

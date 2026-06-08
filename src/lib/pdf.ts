@@ -76,10 +76,10 @@ async function extractPageModel(page: PDFPageProxy, pageIndex: number): Promise<
   }
 }
 
-export async function loadPdfFromFile(file: File): Promise<LoadedPdf> {
-  const buffer = await file.arrayBuffer()
-  const sourceBytes = new Uint8Array(buffer.slice(0))
-  const document = await pdfjsLib.getDocument({ data: buffer }).promise
+export async function loadPdfFromBytes(fileName: string, sourceBytes: Uint8Array): Promise<LoadedPdf> {
+  const buffer = new ArrayBuffer(sourceBytes.byteLength)
+  new Uint8Array(buffer).set(sourceBytes)
+  const document = await pdfjsLib.getDocument({ data: buffer.slice(0) }).promise
   const pages: PageModel[] = []
   const thumbnails: string[] = []
 
@@ -90,12 +90,17 @@ export async function loadPdfFromFile(file: File): Promise<LoadedPdf> {
   }
 
   return {
-    fileName: file.name,
+    fileName,
     document,
     pages,
     thumbnails,
-    sourceBytes,
+    sourceBytes: new Uint8Array(buffer.slice(0)),
   }
+}
+
+export async function loadPdfFromFile(file: File): Promise<LoadedPdf> {
+  const buffer = await file.arrayBuffer()
+  return loadPdfFromBytes(file.name, new Uint8Array(buffer.slice(0)))
 }
 
 export async function renderPageToCanvas(

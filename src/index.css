@@ -12,6 +12,8 @@
   --date-strong: #9b6f00;
   --name: #5aa7ff;
   --name-strong: #155a9c;
+  --phone: #f07aa6;
+  --phone-strong: #a31f55;
   --search: #56c271;
   --search-strong: #126b31;
   --danger: #b42318;
@@ -59,4 +61,3 @@ input:focus-visible {
 #root {
   height: 100vh;
 }
-

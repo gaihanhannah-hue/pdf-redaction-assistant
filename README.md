@@ -1,9 +1,10 @@
 # PDF Redaction Assistant
 
-A client-side PDF review workspace for finding sensitive-looking dates and
-person names before a reviewer decides what to redact. The app renders uploaded
-PDFs in the browser, extracts text with `pdf.js`, maps detected entities back to
-page coordinates, and overlays review highlights on the live document.
+A client-side PDF review workspace for finding sensitive-looking dates, person
+names, and phone numbers before a reviewer decides what to redact. The app
+renders uploaded PDFs in the browser, extracts text with `pdf.js`, maps detected
+entities back to page coordinates, and overlays review highlights on the live
+document.
 
 ## Live Demo
 
@@ -32,8 +33,9 @@ detected dates and names. A sample document is included at
 - Three-panel review layout: thumbnails, PDF viewer, entity panel.
 - Client-side PDF upload and rendering with `pdf.js`.
 - Page thumbnails with active-page feedback.
-- Date and name detection with transparent rule labels.
-- Highlight overlays in distinct colors: yellow for dates, blue for names.
+- Date, name, and phone number detection with transparent rule labels.
+- Highlight overlays in distinct colors: yellow for dates, blue for names, pink
+  for phone numbers.
 - Multiple selected entities can remain highlighted together.
 - Search box for arbitrary terms, highlighted in green.
 - Selected review queue for focused follow-up.
@@ -83,9 +85,10 @@ Date rules include:
 - `YYYY-MM-DD`, e.g. `2024-01-12`
 
 Name detection uses a Title Case heuristic for two to four capitalized words,
-including apostrophe and hyphen variants such as `Mary O'Brien`. This is a
-deliberate tradeoff: it is browser-safe and explainable, but may produce false
-positives for organizations, headings, or addresses.
+including apostrophe and hyphen variants such as `Mary O'Brien`. Phone detection
+uses regular expressions for common US numbers and international `+country code`
+formats. These are deliberate tradeoffs: they are browser-safe and explainable,
+but may produce false positives for organizations, headings, or unusual formats.
 
 ## Coordinate Mapping
 
@@ -105,7 +108,7 @@ has no selectable text.
 
 - Scanned/image-only PDFs need OCR, which is out of scope for this client-only
   version.
-- Regex-based name detection is useful but not perfect.
+- Regex-based name and phone detection is useful but not perfect.
 - Some PDFs split text in ways that make substring highlight boxes approximate.
 - Redaction export is not implemented in v1 because reliable black-box export is
   a larger PDF editing problem than visual review.
@@ -124,5 +127,5 @@ has no selectable text.
 - OCR for scanned documents.
 - Confirm/reject workflow for each detected entity.
 - Downloadable redacted PDF export.
-- Stronger browser-compatible NER for names.
+- Stronger browser-compatible NER for names and richer PII detection.
 - Per-page entity density indicators in the thumbnail rail.

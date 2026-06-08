@@ -4,8 +4,18 @@ import { PdfViewer } from './components/PdfViewer'
 import { ThumbnailRail } from './components/ThumbnailRail'
 import { UploadPanel } from './components/UploadPanel'
 import { extractEntities, extractSearchEntities } from './lib/entityExtraction'
-import { loadPdfFromFile } from './lib/pdf'
-import { exportRedactedPdf } from './lib/redaction'
+import { loadPdfFromBytes, loadPdfFromFile } from './lib/pdf'
+import {
+  createPdfObjectUrl,
+  createRedactedPdfBytes,
+  exportRedactedPdf,
+} from './lib/redaction'
+import {
+  base64ToBytes,
+  bytesToBase64,
+  loadReviewSession,
+  saveReviewSession,
+} from './lib/session'
 import type { Entity, LoadedPdf } from './types'
 import './App.css'
 
@@ -15,12 +25,14 @@ function App() {
   const [selectedEntityIds, setSelectedEntityIds] = useState<Set<string>>(new Set())
   const [redactedEntityIds, setRedactedEntityIds] = useState<Set<string>>(new Set())
   const [activePage, setActivePage] = useState(0)
-  const [leftWidth, setLeftWidth] = useState(168)
+  const [leftWidth, setLeftWidth] = useState(136)
   const [rightWidth, setRightWidth] = useState(346)
   const [searchTerm, setSearchTerm] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [isExporting, setIsExporting] = useState(false)
+  const [isDocumentActionRunning, setIsDocumentActionRunning] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [sessionMessage, setSessionMessage] = useState<string | null>(null)
   const resizeState = useRef<{
     side: 'left' | 'right'
     startX: number
@@ -53,6 +65,43 @@ function App() {
     return [...selectedDetected, ...searchEntities]
   }, [entities, selectedEntityIds, searchEntities])
 
+  const applyLoadedPdf = useCallback(
+    (
+      pdf: LoadedPdf,
+      options?: {
+        selectedEntityIds?: string[]
+        redactedEntityIds?: string[]
+        activePage?: number
+        searchTerm?: string
+      },
+    ) => {
+      const detectedEntities = extractEntities(pdf.pages.flatMap((page) => page.textBoxes))
+      const validEntityIds = new Set(detectedEntities.map((entity) => entity.id))
+
+      setLoadedPdf(pdf)
+      setEntities(detectedEntities)
+
+      if (options?.selectedEntityIds) {
+        setSelectedEntityIds(
+          new Set(options.selectedEntityIds.filter((id) => validEntityIds.has(id))),
+        )
+      } else {
+        const firstDate = detectedEntities.find((e) => e.type === 'date')
+        const firstName = detectedEntities.find((e) => e.type === 'name')
+        const firstPhone = detectedEntities.find((e) => e.type === 'phone')
+        const defaults = [firstDate, firstName, firstPhone].filter(Boolean) as Entity[]
+        setSelectedEntityIds(new Set(defaults.map((entity) => entity.id)))
+      }
+
+      setRedactedEntityIds(
+        new Set((options?.redactedEntityIds ?? []).filter((id) => validEntityIds.has(id))),
+      )
+      setActivePage(options?.activePage ?? 0)
+      setSearchTerm(options?.searchTerm ?? '')
+    },
+    [],
+  )
+
   const handleFileSelected = useCallback(async (file: File) => {
     if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
       setError('Please upload a PDF file.')
@@ -64,17 +113,8 @@ function App() {
 
     try {
       const pdf = await loadPdfFromFile(file)
-      const detectedEntities = extractEntities(pdf.pages.flatMap((page) => page.textBoxes))
-
-      setLoadedPdf(pdf)
-      setEntities(detectedEntities)
-      const firstDate = detectedEntities.find((e) => e.type === 'date')
-      const firstName = detectedEntities.find((e) => e.type === 'name')
-      const defaults = [firstDate, firstName].filter(Boolean) as Entity[]
-      setSelectedEntityIds(new Set(defaults.map((entity) => entity.id)))
-      setRedactedEntityIds(new Set())
-      setActivePage(0)
-      setSearchTerm('')
+      applyLoadedPdf(pdf)
+      setSessionMessage(null)
     } catch (loadError) {
       console.error(loadError)
       setError('The PDF could not be read. Try another file.')
@@ -85,7 +125,40 @@ function App() {
     } finally {
       setIsLoading(false)
     }
-  }, [])
+  }, [applyLoadedPdf])
+
+  useEffect(() => {
+    const restoreSession = async () => {
+      const savedSession = loadReviewSession()
+
+      if (!savedSession) {
+        return
+      }
+
+      setIsLoading(true)
+
+      try {
+        const pdf = await loadPdfFromBytes(
+          savedSession.fileName,
+          base64ToBytes(savedSession.sourceBytesBase64),
+        )
+        applyLoadedPdf(pdf, {
+          selectedEntityIds: savedSession.selectedEntityIds,
+          redactedEntityIds: savedSession.redactedEntityIds,
+          activePage: savedSession.activePage,
+          searchTerm: savedSession.searchTerm,
+        })
+        setSessionMessage(`Restored saved session from ${new Date(savedSession.savedAt).toLocaleString()}.`)
+      } catch (restoreError) {
+        console.error(restoreError)
+        setError('Failed to restore the saved session.')
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    void restoreSession()
+  }, [applyLoadedPdf])
 
   const toggleEntity = useCallback((entityId: string) => {
     setSelectedEntityIds((current) => {
@@ -137,7 +210,7 @@ function App() {
   }, [])
 
   const selectAllByType = useCallback(
-    (type: 'date' | 'name') => {
+    (type: Exclude<Entity['type'], 'search'>) => {
       setSelectedEntityIds((current) => {
         const next = new Set(current)
         for (const entity of entities) {
@@ -152,7 +225,7 @@ function App() {
   )
 
   const deselectAllByType = useCallback(
-    (type: 'date' | 'name') => {
+    (type: Exclude<Entity['type'], 'search'>) => {
       setSelectedEntityIds((current) => {
         const next = new Set(current)
         for (const entity of entities) {
@@ -190,19 +263,79 @@ function App() {
     setActivePage(pageIndex)
   }, [])
 
-  const handlePrint = useCallback(() => {
+  const getCurrentPdfBytes = useCallback(async () => {
+    if (!loadedPdf) {
+      return null
+    }
+
+    if (redactionQueue.length === 0) {
+      return loadedPdf.sourceBytes
+    }
+
+    return createRedactedPdfBytes({
+      sourceBytes: loadedPdf.sourceBytes,
+      pages: loadedPdf.pages,
+      redactions: redactionQueue,
+    })
+  }, [loadedPdf, redactionQueue])
+
+  const handleSaveSession = useCallback(() => {
     if (!loadedPdf) return
-    const sourceBuffer = new ArrayBuffer(loadedPdf.sourceBytes.byteLength)
-    new Uint8Array(sourceBuffer).set(loadedPdf.sourceBytes)
-    const blob = new Blob([sourceBuffer], { type: 'application/pdf' })
-    const url = URL.createObjectURL(blob)
-    const printWindow = window.open(url, '_blank')
-    if (printWindow) {
+
+    setIsDocumentActionRunning(true)
+
+    try {
+      const savedAt = new Date().toISOString()
+      saveReviewSession({
+        fileName: loadedPdf.fileName,
+        sourceBytesBase64: bytesToBase64(loadedPdf.sourceBytes),
+        selectedEntityIds: [...selectedEntityIds],
+        redactedEntityIds: [...redactedEntityIds],
+        activePage,
+        searchTerm,
+        savedAt,
+      })
+      setSessionMessage(`Saved session at ${new Date(savedAt).toLocaleString()}.`)
+    } catch (saveError) {
+      console.error(saveError)
+      setError('Failed to save the session. The PDF may be too large for browser storage.')
+    } finally {
+      setIsDocumentActionRunning(false)
+    }
+  }, [activePage, loadedPdf, redactedEntityIds, searchTerm, selectedEntityIds])
+
+  const handlePrint = useCallback(async () => {
+    if (!loadedPdf) return
+
+    const printWindow = window.open('about:blank', '_blank')
+    if (!printWindow) {
+      setError('The print window was blocked by the browser.')
+      return
+    }
+
+    setIsDocumentActionRunning(true)
+
+    try {
+      const bytes = await getCurrentPdfBytes()
+
+      if (!bytes) {
+        return
+      }
+
+      const url = createPdfObjectUrl(bytes)
+      printWindow.location.href = url
       printWindow.addEventListener('load', () => {
+        printWindow.print()
         setTimeout(() => URL.revokeObjectURL(url), 1000)
       })
+    } catch (printError) {
+      console.error(printError)
+      printWindow.close()
+      setError('Failed to prepare the PDF for printing.')
+    } finally {
+      setIsDocumentActionRunning(false)
     }
-  }, [loadedPdf])
+  }, [getCurrentPdfBytes, loadedPdf])
 
   const handleExportRedactions = useCallback(async () => {
     if (!loadedPdf || redactionQueue.length === 0) {
@@ -243,7 +376,7 @@ function App() {
       const delta = event.clientX - state.startX
 
       if (state.side === 'left') {
-        const nextLeft = Math.min(Math.max(state.startLeft + delta, 140), 320)
+        const nextLeft = Math.min(Math.max(state.startLeft + delta, 112), 260)
         setLeftWidth(nextLeft)
       } else {
         const nextRight = Math.min(Math.max(state.startRight - delta, 260), 520)
@@ -314,16 +447,23 @@ function App() {
           error={error}
           fileName={loadedPdf?.fileName ?? null}
           hasDocument={loadedPdf !== null}
+          hasRedactions={redactionQueue.length > 0}
+          isDocumentActionRunning={isDocumentActionRunning}
           isLoading={isLoading}
           onFileSelected={handleFileSelected}
           onPrint={handlePrint}
+          onSaveSession={handleSaveSession}
+          sessionMessage={sessionMessage}
         />
       </header>
 
       <div className="workspace-grid">
         <ThumbnailRail
           activePage={activePage}
+          highlights={visibleEntities}
           onPageSelect={setActivePage}
+          pages={loadedPdf?.pages ?? []}
+          redactions={redactionQueue}
           thumbnails={loadedPdf?.thumbnails ?? []}
         />
         <div

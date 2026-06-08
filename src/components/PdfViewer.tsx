@@ -177,7 +177,7 @@ export function PdfViewer({
     <main className="viewer-shell" aria-label="PDF viewer">
       <div className="viewer-toolbar">
         <span>{document ? `${pages.length} pages` : 'Waiting for PDF'}</span>
-        <span>Yellow dates · Blue names · Green search</span>
+        <span>Yellow dates · Blue names · Pink phones · Green search</span>
       </div>
 
       <div className="pdf-scroll" ref={viewerRef}>
@@ -203,4 +203,3 @@ export function PdfViewer({
     </main>
   )
 }
-
