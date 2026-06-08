@@ -1,14 +1,18 @@
-import { FileUp, Loader2, Printer, Save } from 'lucide-react'
+import { FilePlus2, FileUp, Loader2, Printer, Save } from 'lucide-react'
+import type { ReviewDraftSummary } from '../lib/session'
 
 type UploadPanelProps = {
   fileName: string | null
   isLoading: boolean
   error: string | null
+  drafts: ReviewDraftSummary[]
   hasDocument: boolean
   hasRedactions: boolean
   isDocumentActionRunning: boolean
   sessionMessage: string | null
   onFileSelected: (file: File) => void
+  onLoadDraft: (draftId: string) => void
+  onNewSession: () => void
   onPrint: () => void
   onSaveSession: () => void
 }
@@ -17,11 +21,14 @@ export function UploadPanel({
   fileName,
   isLoading,
   error,
+  drafts,
   hasDocument,
   hasRedactions,
   isDocumentActionRunning,
   sessionMessage,
   onFileSelected,
+  onLoadDraft,
+  onNewSession,
   onPrint,
   onSaveSession,
 }: UploadPanelProps) {
@@ -54,29 +61,59 @@ export function UploadPanel({
         {fileName ? <span>Loaded: {fileName}</span> : <span>No document loaded yet</span>}
         {sessionMessage ? <span>{sessionMessage}</span> : null}
         {error ? <strong>{error}</strong> : null}
-        {hasDocument ? (
-          <div className="document-actions">
-            <span>{hasRedactions ? 'Current session includes redactions' : 'No redactions marked yet'}</span>
-            <button
-              className="document-action-button"
-              disabled={isDocumentActionRunning}
-              onClick={onSaveSession}
-              type="button"
-            >
-              {isDocumentActionRunning ? <Loader2 className="spin" size={18} /> : <Save size={18} />}
-              Save Session
-            </button>
-            <button
-              className="document-action-button"
-              disabled={isDocumentActionRunning}
-              onClick={onPrint}
-              type="button"
-            >
-              <Printer size={18} />
-              Print PDF
-            </button>
-          </div>
-        ) : null}
+        <div className="document-actions">
+          <span>{hasRedactions ? 'Current draft includes redactions' : 'Drafts stay in this browser'}</span>
+          <button
+            className="document-action-button"
+            disabled={isDocumentActionRunning || isLoading}
+            onClick={onNewSession}
+            type="button"
+          >
+            <FilePlus2 size={18} />
+            New Session
+          </button>
+          <select
+            aria-label="Load saved draft"
+            className="draft-select"
+            disabled={drafts.length === 0 || isDocumentActionRunning || isLoading}
+            onChange={(event) => {
+              if (event.target.value) {
+                onLoadDraft(event.target.value)
+                event.target.value = ''
+              }
+            }}
+            value=""
+          >
+            <option value="">Load draft...</option>
+            {drafts.map((draft) => (
+              <option key={draft.id} value={draft.id}>
+                {draft.fileName} · {new Date(draft.savedAt).toLocaleString()}
+              </option>
+            ))}
+          </select>
+          {hasDocument ? (
+            <>
+              <button
+                className="document-action-button"
+                disabled={isDocumentActionRunning}
+                onClick={onSaveSession}
+                type="button"
+              >
+                {isDocumentActionRunning ? <Loader2 className="spin" size={18} /> : <Save size={18} />}
+                Save Draft
+              </button>
+              <button
+                className="document-action-button"
+                disabled={isDocumentActionRunning}
+                onClick={onPrint}
+                type="button"
+              >
+                <Printer size={18} />
+                Print PDF
+              </button>
+            </>
+          ) : null}
+        </div>
       </div>
     </section>
   )

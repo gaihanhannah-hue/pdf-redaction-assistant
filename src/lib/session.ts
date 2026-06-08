@@ -1,6 +1,7 @@
-const SESSION_KEY = 'pdf-redaction-assistant-session-v1'
+const DRAFTS_KEY = 'pdf-redaction-assistant-drafts-v1'
 
-export type SavedReviewSession = {
+export type SavedReviewDraft = {
+  id: string
   fileName: string
   sourceBytesBase64: string
   selectedEntityIds: string[]
@@ -10,23 +11,44 @@ export type SavedReviewSession = {
   savedAt: string
 }
 
-export function saveReviewSession(session: SavedReviewSession) {
-  localStorage.setItem(SESSION_KEY, JSON.stringify(session))
+export type ReviewDraftSummary = {
+  id: string
+  fileName: string
+  savedAt: string
 }
 
-export function loadReviewSession() {
-  const raw = localStorage.getItem(SESSION_KEY)
+function readDrafts() {
+  const raw = localStorage.getItem(DRAFTS_KEY)
 
   if (!raw) {
-    return null
+    return []
   }
 
   try {
-    return JSON.parse(raw) as SavedReviewSession
+    return JSON.parse(raw) as SavedReviewDraft[]
   } catch {
-    localStorage.removeItem(SESSION_KEY)
-    return null
+    localStorage.removeItem(DRAFTS_KEY)
+    return []
   }
+}
+
+function writeDrafts(drafts: SavedReviewDraft[]) {
+  localStorage.setItem(DRAFTS_KEY, JSON.stringify(drafts))
+}
+
+export function listReviewDrafts(): ReviewDraftSummary[] {
+  return readDrafts()
+    .map(({ id, fileName, savedAt }) => ({ id, fileName, savedAt }))
+    .sort((a, b) => Date.parse(b.savedAt) - Date.parse(a.savedAt))
+}
+
+export function saveReviewDraft(draft: SavedReviewDraft) {
+  const drafts = readDrafts()
+  writeDrafts([draft, ...drafts].slice(0, 12))
+}
+
+export function loadReviewDraft(id: string) {
+  return readDrafts().find((draft) => draft.id === id) ?? null
 }
 
 export function bytesToBase64(bytes: Uint8Array) {

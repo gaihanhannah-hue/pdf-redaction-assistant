@@ -13,8 +13,10 @@ import {
 import {
   base64ToBytes,
   bytesToBase64,
-  loadReviewSession,
-  saveReviewSession,
+  listReviewDrafts,
+  loadReviewDraft,
+  saveReviewDraft,
+  type ReviewDraftSummary,
 } from './lib/session'
 import type { Entity, LoadedPdf } from './types'
 import './App.css'
@@ -33,6 +35,7 @@ function App() {
   const [isDocumentActionRunning, setIsDocumentActionRunning] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [sessionMessage, setSessionMessage] = useState<string | null>(null)
+  const [drafts, setDrafts] = useState<ReviewDraftSummary[]>(() => listReviewDrafts())
   const resizeState = useRef<{
     side: 'left' | 'right'
     startX: number
@@ -114,7 +117,7 @@ function App() {
     try {
       const pdf = await loadPdfFromFile(file)
       applyLoadedPdf(pdf)
-      setSessionMessage(null)
+      setSessionMessage('New unsaved draft.')
     } catch (loadError) {
       console.error(loadError)
       setError('The PDF could not be read. Try another file.')
@@ -127,38 +130,47 @@ function App() {
     }
   }, [applyLoadedPdf])
 
-  useEffect(() => {
-    const restoreSession = async () => {
-      const savedSession = loadReviewSession()
+  const handleNewSession = useCallback(() => {
+    setLoadedPdf(null)
+    setEntities([])
+    setSelectedEntityIds(new Set())
+    setRedactedEntityIds(new Set())
+    setActivePage(0)
+    setSearchTerm('')
+    setError(null)
+    setSessionMessage('Started a new session.')
+  }, [])
 
-      if (!savedSession) {
+  const handleLoadDraft = useCallback(
+    async (draftId: string) => {
+      const draft = loadReviewDraft(draftId)
+
+      if (!draft) {
+        setError('The selected draft could not be found.')
         return
       }
 
       setIsLoading(true)
+      setError(null)
 
       try {
-        const pdf = await loadPdfFromBytes(
-          savedSession.fileName,
-          base64ToBytes(savedSession.sourceBytesBase64),
-        )
+        const pdf = await loadPdfFromBytes(draft.fileName, base64ToBytes(draft.sourceBytesBase64))
         applyLoadedPdf(pdf, {
-          selectedEntityIds: savedSession.selectedEntityIds,
-          redactedEntityIds: savedSession.redactedEntityIds,
-          activePage: savedSession.activePage,
-          searchTerm: savedSession.searchTerm,
+          selectedEntityIds: draft.selectedEntityIds,
+          redactedEntityIds: draft.redactedEntityIds,
+          activePage: draft.activePage,
+          searchTerm: draft.searchTerm,
         })
-        setSessionMessage(`Restored saved session from ${new Date(savedSession.savedAt).toLocaleString()}.`)
-      } catch (restoreError) {
-        console.error(restoreError)
-        setError('Failed to restore the saved session.')
+        setSessionMessage(`Loaded draft saved at ${new Date(draft.savedAt).toLocaleString()}.`)
+      } catch (draftError) {
+        console.error(draftError)
+        setError('Failed to load the selected draft.')
       } finally {
         setIsLoading(false)
       }
-    }
-
-    void restoreSession()
-  }, [applyLoadedPdf])
+    },
+    [applyLoadedPdf],
+  )
 
   const toggleEntity = useCallback((entityId: string) => {
     setSelectedEntityIds((current) => {
@@ -286,7 +298,8 @@ function App() {
 
     try {
       const savedAt = new Date().toISOString()
-      saveReviewSession({
+      saveReviewDraft({
+        id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
         fileName: loadedPdf.fileName,
         sourceBytesBase64: bytesToBase64(loadedPdf.sourceBytes),
         selectedEntityIds: [...selectedEntityIds],
@@ -295,10 +308,11 @@ function App() {
         searchTerm,
         savedAt,
       })
-      setSessionMessage(`Saved session at ${new Date(savedAt).toLocaleString()}.`)
+      setDrafts(listReviewDrafts())
+      setSessionMessage(`Saved draft at ${new Date(savedAt).toLocaleString()}.`)
     } catch (saveError) {
       console.error(saveError)
-      setError('Failed to save the session. The PDF may be too large for browser storage.')
+      setError('Failed to save the draft. The PDF may be too large for browser storage.')
     } finally {
       setIsDocumentActionRunning(false)
     }
@@ -451,8 +465,11 @@ function App() {
           isDocumentActionRunning={isDocumentActionRunning}
           isLoading={isLoading}
           onFileSelected={handleFileSelected}
+          onLoadDraft={handleLoadDraft}
+          onNewSession={handleNewSession}
           onPrint={handlePrint}
           onSaveSession={handleSaveSession}
+          drafts={drafts}
           sessionMessage={sessionMessage}
         />
       </header>

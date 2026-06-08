@@ -69,6 +69,7 @@ function GroupedEntityRow({
   const isSingle = items.length === 1
   const allIds = items.map((e) => e.id)
   const allSelected = allIds.every((id) => selectedEntityIds.has(id))
+  const allRedacted = allIds.every((id) => redactedEntityIds.has(id))
 
   const sorted = [...items].sort(compareEntitiesByDocumentOrder)
 
@@ -79,6 +80,18 @@ function GroupedEntityRow({
       onSelectEntityIds(allIds)
       onNavigateToPage(sorted[0].pageIndex)
     }
+  }
+
+  const handleGroupRedactionToggle = () => {
+    for (const entity of sorted) {
+      const redacted = redactedEntityIds.has(entity.id)
+
+      if ((allRedacted && redacted) || (!allRedacted && !redacted)) {
+        onRedactionToggle(entity.id, entity.pageIndex)
+      }
+    }
+
+    onNavigateToPage(sorted[0].pageIndex)
   }
 
   if (isSingle) {
@@ -148,6 +161,16 @@ function GroupedEntityRow({
           </span>
           <span className="entity-text">{text}</span>
           <strong className="group-count">{items.length}</strong>
+        </button>
+        <button
+          className={`redact-toggle group-redact-toggle ${allRedacted ? 'active' : ''}`}
+          onClick={(event) => {
+            event.stopPropagation()
+            handleGroupRedactionToggle()
+          }}
+          type="button"
+        >
+          {allRedacted ? 'Clear all' : 'Redact all'}
         </button>
       </div>
 
